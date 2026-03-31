@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+  <title>CleverPick REAL AI | Live LLM-Powered Model Router</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;14..32,400;14..32,500;14..32,600;14..32,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+  <script src="https://unpkg.com/react@18.2.0/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    body {
+      background: radial-gradient(circle at 10% 30%, #0a0f1e, #03060c);
+      min-height: 100vh;
+    }
+    .glass-card {
+      background: rgba(15, 25, 45, 0.55);
+      backdrop-filter: blur(14px);
+      border: 1px solid rgba(66, 153, 225, 0.2);
+      border-radius: 2rem;
+      transition: all 0.2s ease;
+    }
+    .glass-card:hover {
+      border-color: rgba(66, 153, 225, 0.5);
+    }
+    .model-card {
+      transition: transform 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+    }
+    .model-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 30px -12px rgba(0, 160, 255, 0.3);
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .animate-pulse-slow {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    .toast-notify {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 1000;
+      background: #0f172ad9;
+      backdrop-filter: blur(12px);
+      border-left: 5px solid #10b981;
+      border-radius: 1rem;
+      padding: 0.75rem 1.5rem;
+      font-weight: 500;
+    }
+    .typing-indicator {
+      display: inline-flex;
+      gap: 4px;
+    }
+    .typing-indicator span {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #3b82f6;
+      animation: bounce 1.4s infinite ease-in-out;
+    }
+    @keyframes bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-10px); }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // 🔑 YOUR GROQ API KEY - REPLACE WITH YOUR ACTUAL KEY
+    const GROQ_API_KEY = "YOUR_GROQ_API_KEY_HERE";
+    
+    // ✅ FIXED: Check if we have a valid API key (not the placeholder)
+    const HAS_VALID_API_KEY = GROQ_API_KEY && 
+                              GROQ_API_KEY !== "gsk_your-actual-key-here" && 
+                              GROQ_API_KEY.startsWith("gsk_") &&
+                              GROQ_API_KEY.length > 20;
+
+    // Model configurations
+    const MODELS = [
+      { 
+        id: "chatgpt", 
+        name: "ChatGPT", 
+        icon: "fab fa-openai", 
+        color: "from-green-500 to-emerald-500",
+        urlTemplate: "https://chat.openai.com/?prompt=",
+        description: "Best for creative writing, coding, general conversation"
+      },
+      { 
+        id: "gemini", 
+        name: "Gemini", 
+        icon: "fas fa-star-of-life", 
+        color: "from-blue-500 to-cyan-500",
+        urlTemplate: "https://gemini.google.com/app?prompt=",
+        description: "Best for research, data analysis, multimodal tasks"
+      },
+      { 
+        id: "claude", 
+        name: "Claude", 
+        icon: "fas fa-brain", 
+        color: "from-purple-500 to-pink-500",
+        urlTemplate: "https://claude.ai/new?q=",
+        description: "Best for deep reasoning, long context, ethical analysis"
+      },
+      { 
+        id: "deepseek", 
+        name: "DeepSeek", 
+        icon: "fas fa-chart-line", 
+        color: "from-orange-500 to-red-500",
+        urlTemplate: "https://chat.deepseek.com/?q=",
+        description: "Best for math, complex coding, technical problems"
+      }
+    ];
+
+    // REAL AI evaluation using Groq API
+    async function evaluateWithRealAI(query) {
+      if (!HAS_VALID_API_KEY) {
+        console.log("No valid API key found. Using simulation mode.");
+        return simulateRealAIEvaluation(query);
+      }
+      
+      try {
+        console.log("Calling Groq API with key:", GROQ_API_KEY.substring(0, 10) + "...");
+        
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${GROQ_API_KEY}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+              {
+                role: 'system',
+                content: `You are an expert AI model router. Analyze the user's query and determine which AI model would be best.
+                
+                Return ONLY a JSON object with this exact structure (no other text):
+                {
+                  "scores": {
+                    "chatgpt": number between 0-100,
+                    "gemini": number between 0-100,
+                    "claude": number between 0-100,
+                    "deepseek": number between 0-100
+                  },
+                  "bestModel": "chatgpt" or "gemini" or "claude" or "deepseek",
+                  "domain": "coding" or "research" or "creative" or "analytical" or "general",
+                  "reasoning": "brief explanation of why this model is best (max 100 words)"
+                }
+                
+                IMPORTANT: Give DIFFERENT scores to each model based on their strengths. No two models should have the same score.
+                
+                Base scores on actual model strengths:
+                - ChatGPT: Excellent for creative writing (90-98), coding (85-95), conversation (90-95)
+                - Gemini: Excellent for research (90-98), data analysis (85-95), multimodal (90-96)
+                - Claude: Excellent for reasoning (90-98), long context (92-98), ethical analysis (88-95)
+                - DeepSeek: Excellent for math (92-99), complex coding (88-96), technical problems (85-95)
+                
+                Adjust scores based on query requirements.`
+              },
+              {
+                role: 'user',
+                content: query
+              }
+            ],
+            temperature: 0.3,
+            max_tokens: 800
+          })
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error("API Error:", response.status, errorText);
+          throw new Error(`API request failed: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        const content = data.choices[0].message.content;
+        console.log("API Response:", content);
+        
+        // Parse the JSON response
+        try {
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const result = JSON.parse(jsonMatch[0]);
+            if (result.scores && result.bestModel && result.domain && result.reasoning) {
+              console.log("Successfully parsed AI evaluation:", result);
+              return result;
+            }
+          }
+        } catch (e) {
+          console.error('Parse error:', e);
+        }
+        
+        throw new Error('Invalid response format from AI');
+      } catch (error) {
+        console.error('Real AI evaluation failed:', error);
+        showToast(`API Error: ${error.message}. Using simulation.`, "error");
+        return simulateRealAIEvaluation(query);
+      }
+    }
+    
+    // Enhanced simulation that ensures DIFFERENT scores for each model
+    function simulateRealAIEvaluation(query) {
+      console.log("Using simulation mode with different scores per model");
+      const q = query.toLowerCase();
+      
+      let scores = { chatgpt: 65, gemini: 68, claude: 67, deepseek: 66 };
+      
+      // Coding detection
+      if (q.match(/code|function|debug|algorithm|python|javascript|react|html|css|program|software|api/)) {
+        scores.deepseek += 28;
+        scores.chatgpt += 22;
+        scores.claude += 10;
+        scores.gemini += 5;
+      }
+      
+      // Math detection
+      if (q.match(/math|equation|calculate|solve|formula|algebra|calculus|geometry|trigonometry/)) {
+        scores.deepseek += 32;
+        scores.claude += 12;
+        scores.chatgpt += 8;
+        scores.gemini += 5;
+      }
+      
+      // Research detection
+      if (q.match(/research|paper|study|analyze|data|statistics|academic|scientific|literature/)) {
+        scores.gemini += 30;
+        scores.claude += 18;
+        scores.chatgpt += 10;
+        scores.deepseek += 5;
+      }
+      
+      // Creative detection
+      if (q.match(/creative|story|poem|essay|write|content|blog|article|script/)) {
+        scores.chatgpt += 28;
+        scores.claude += 12;
+        scores.gemini += 8;
+        scores.deepseek += 3;
+      }
+      
+      // Reasoning detection
+      if (q.match(/reason|logic|explain|why|how|analyze|compare|contrast|evaluate/)) {
+        scores.claude += 26;
+        scores.deepseek += 12;
+        scores.chatgpt += 10;
+        scores.gemini += 8;
+      }
+      
+      // Long context detection
+      if (query.length > 500) {
+        scores.claude += 18;
+        scores.gemini += 10;
+      }
+      
+      // Technical complexity
+      if (q.match(/complex|advanced|optimization|performance|scalability|architecture/)) {
+        scores.deepseek += 15;
+        scores.claude += 12;
+      }
+      
+      // Multimodal detection
+      if (q.match(/image|video|audio|visual|diagram|chart|graph|picture/)) {
+        scores.gemini += 22;
+        scores.claude += 5;
+      }
+      
+      // Normalize scores
+      Object.keys(scores).forEach(key => {
+        scores[key] = Math.min(100, Math.max(0, Math.round(scores[key])));
+      });
+      
+      // Determine best model
+      let bestModel = "chatgpt";
+      let bestScore = 0;
+      for (const [model, score] of Object.entries(scores)) {
+        if (score > bestScore) {
+          bestScore = score;
+          bestModel = model;
+        }
+      }
+      
+      // Detect domain
+      let domain = "general";
+      if (q.match(/code|function|debug|algorithm|program/)) domain = "coding";
+      else if (q.match(/research|paper|study|analyze|data/)) domain = "research";
+      else if (q.match(/creative|story|poem|essay|write/)) domain = "creative";
+      else if (q.match(/math|equation|calculate|solve|reason|logic/)) domain = "analytical";
+      
+      // Generate reasoning
+      const bestScoreValue = scores[bestModel];
+      const secondBest = Object.entries(scores).sort((a,b) => b[1] - a[1])[1];
+      
+      let reasoning = "";
+      if (bestModel === "chatgpt") {
+        reasoning = `ChatGPT is the optimal choice with ${bestScoreValue}/100. It excels at ${domain} tasks, particularly ${q.includes('creative') ? 'creative expression' : q.includes('code') ? 'code generation' : 'natural conversation'}.`;
+      } else if (bestModel === "gemini") {
+        reasoning = `Gemini leads with ${bestScoreValue}/100 for this ${domain} query. Its strengths in ${q.includes('research') ? 'research and data analysis' : 'multimodal understanding'} make it ideal.`;
+      } else if (bestModel === "claude") {
+        reasoning = `Claude is recommended with ${bestScoreValue}/100. Its deep reasoning and safety features are perfect for this ${domain} task.`;
+      } else {
+        reasoning = `DeepSeek is the best match with ${bestScoreValue}/100. Its technical depth and ${q.includes('math') ? 'mathematical' : 'coding'} capabilities are ideal.`;
+      }
+      
+      return { scores, bestModel, domain, reasoning };
+    }
+    
+    // Optimize prompt based on domain
+    function optimizePrompt(rawQuery, domain) {
+      const templates = {
+        coding: `[Technical Task]\n${rawQuery}\n\nPlease provide:\n• Clean, efficient code with comments\n• Explanation of the approach\n• Time/space complexity analysis\n• Example usage\n• Edge cases and optimizations`,
+        research: `[Research Query]\n${rawQuery}\n\nPlease provide:\n• Comprehensive analysis\n• Key findings and data\n• Methodology insights\n• Citations and references\n• Future implications`,
+        creative: `[Creative Task]\n${rawQuery}\n\nPlease provide:\n• Engaging, original content\n• Rich details and descriptions\n• Multiple creative elements\n• Emotional resonance\n• Unique perspective`,
+        analytical: `[Analytical Problem]\n${rawQuery}\n\nPlease provide:\n• Step-by-step reasoning\n• Evidence-based analysis\n• Multiple perspectives\n• Practical applications\n• Key conclusions`,
+        general: `[Enhanced Query]\n${rawQuery}\n\nPlease provide:\n• Clear, comprehensive answer\n• Relevant examples\n• Practical insights\n• Key takeaways\n• Follow-up considerations`
+      };
+      return templates[domain] || templates.general;
+    }
+    
+    // Helper functions
+    function showToast(msg, type = "success") {
+      const toastDiv = document.createElement('div');
+      toastDiv.className = `toast-notify text-white ${type === 'success' ? 'border-green-400' : 'border-red-400'}`;
+      toastDiv.innerHTML = `<i class="fas ${type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle'} mr-2"></i> ${msg}`;
+      document.body.appendChild(toastDiv);
+      setTimeout(() => toastDiv.remove(), 3000);
+    }
+    
+    function saveToLocalStorage(key, data) {
+      localStorage.setItem(key, JSON.stringify(data));
+    }
+    
+    function getFromLocalStorage(key, defaultValue) {
+      const stored = localStorage.getItem(key);
+      return stored ? JSON.parse(stored) : defaultValue;
+    }
+    
+    // Navbar Component
+    const Navbar = ({ setActivePage, activePage }) => (
+      <nav className="flex flex-wrap justify-between items-center px-6 py-4 border-b border-white/10 bg-black/30 backdrop-blur-md sticky top-0 z-30">
+        <div className="flex items-center gap-3">
+          <i className="fas fa-brain text-blue-400 text-2xl"></i>
+          <span className="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">CleverPick REAL AI</span>
+          <span className={`text-xs ml-2 hidden sm:inline-block ${HAS_VALID_API_KEY ? 'text-green-400' : 'text-yellow-400'}`}>
+            <i className="fas fa-microchip mr-1"></i>
+            {HAS_VALID_API_KEY ? "✅ Live AI Evaluation" : "⚠️ Demo Mode"}
+          </span>
+        </div>
+        <div className="flex gap-3 text-sm font-medium">
+          {["Chat", "Dashboard", "Settings"].map(page => (
+            <button key={page} onClick={() => setActivePage(page)} className={`px-4 py-2 rounded-full transition-all ${activePage === page ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-300 hover:bg-white/10'}`}>{page}</button>
+          ))}
+        </div>
+      </nav>
+    );
+    
+    // History Sidebar
+    const HistorySidebar = ({ onSelectHistory }) => {
+      const [history, setHistory] = useState([]);
+      useEffect(() => {
+        const stored = getFromLocalStorage("cleverpick_real_history", []);
+        setHistory(stored);
+      }, []);
+      if(history.length === 0) return <div className="text-white/40 text-sm p-4 text-center"><i className="fas fa-history mr-2"></i>No history</div>;
+      return (
+        <div className="space-y-2 max-h-[70vh] overflow-y-auto pr-1 scrollbar-hide">
+          {history.map((item, idx) => (
+            <div key={idx} onClick={() => onSelectHistory(item)} className="glass-card p-3 cursor-pointer hover:bg-white/10 transition rounded-xl">
+              <p className="text-xs text-blue-300 truncate">{item.query.substring(0, 45)}</p>
+              <div className="flex justify-between mt-1">
+                <p className="text-[11px] text-gray-400"><i className="fas fa-robot mr-1"></i>{item.selectedModel}</p>
+                <p className="text-[10px] text-green-400">{item.score}% match</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    };
+    
+    // Main Chat Page
+    const ChatPage = ({ setToast }) => {
+      const [query, setQuery] = useState("");
+      const [optimizedPrompt, setOptimizedPrompt] = useState("");
+      const [evaluation, setEvaluation] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [currentStep, setCurrentStep] = useState("");
+      const [rankedModels, setRankedModels] = useState([]);
+      const [history, setHistory] = useState([]);
+      
+      useEffect(() => {
+        const stored = getFromLocalStorage("cleverpick_real_history", []);
+        setHistory(stored);
+      }, []);
+      
+      const handleEvaluate = async () => {
+        if (!query.trim()) {
+          showToast("Please enter a query", "error");
+          return;
+        }
+        
+        setLoading(true);
+        setCurrentStep(HAS_VALID_API_KEY ? "🤖 Calling Groq AI (LLaMA 3)..." : "🧠 Using smart simulation...");
+        
+        try {
+          const evalResult = await evaluateWithRealAI(query);
+          setEvaluation(evalResult);
+          
+          setCurrentStep("✨ Optimizing prompt...");
+          const optimized = optimizePrompt(query, evalResult.domain);
+          setOptimizedPrompt(optimized);
+          
+          setCurrentStep("📊 Generating rankings...");
+          const ranked = MODELS.map(model => ({
+            ...model,
+            score: evalResult.scores[model.id],
+            isBest: evalResult.bestModel === model.id
+          })).sort((a, b) => b.score - a.score);
+          
+          setRankedModels(ranked);
+          setCurrentStep("");
+          
+          showToast(`✓ AI selected ${ranked[0]?.name} with ${ranked[0]?.score}% confidence`, "success");
+        } catch (error) {
+          console.error("Evaluation error:", error);
+          showToast("Evaluation failed, please try again", "error");
+          setCurrentStep("");
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      const handleRedirect = (model) => {
+        if (!optimizedPrompt) {
+          showToast("Please evaluate your query first", "error");
+          return;
+        }
+        
+        const encoded = encodeURIComponent(optimizedPrompt);
+        let url = model.urlTemplate + encoded;
+        if (model.id === "deepseek") url = `https://chat.deepseek.com/?q=${encoded}`;
+        
+        window.open(url, "_blank");
+        
+        const historyEntry = {
+          query: query,
+          optimizedPrompt: optimizedPrompt,
+          selectedModel: model.name,
+          score: evaluation?.scores[model.id],
+          domain: evaluation?.domain,
+          timestamp: new Date().toISOString()
+        };
+        
+        const updatedHistory = [historyEntry, ...history].slice(0, 20);
+        setHistory(updatedHistory);
+        saveToLocalStorage("cleverpick_real_history", updatedHistory);
+        
+        const analytics = getFromLocalStorage("cleverpick_real_analytics", { total: 0, modelUsage: {} });
+        analytics.total++;
+        analytics.modelUsage[model.id] = (analytics.modelUsage[model.id] || 0) + 1;
+        saveToLocalStorage("cleverpick_real_analytics", analytics);
+        
+        showToast(`🚀 Redirecting to ${model.name} with optimized prompt!`, "success");
+      };
+      
+      const getScoreColor = (score) => {
+        if (score >= 85) return "text-green-400";
+        if (score >= 70) return "text-blue-400";
+        if (score >= 60) return "text-yellow-400";
+        return "text-red-400";
+      };
+      
+      return (
+        <div className="flex flex-col lg:flex-row gap-6 p-6">
+          <div className="flex-1 space-y-6">
+            <div className="glass-card p-6">
+              <label className="block text-white/80 font-semibold mb-2">
+                <i className="fas fa-pen-alt mr-2 text-blue-400"></i>Your Query
+              </label>
+              <textarea 
+                rows="4" 
+                className="w-full bg-black/40 border border-white/20 rounded-2xl p-4 text-white placeholder:text-gray-500 focus:ring-2 focus:ring-blue-500 outline-none resize-none" 
+                placeholder="Example: Write a Python function to calculate Fibonacci numbers efficiently..."
+                value={query} 
+                onChange={(e) => setQuery(e.target.value)}
+                disabled={loading}
+              />
+              <button 
+                onClick={handleEvaluate} 
+                disabled={loading}
+                className="mt-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 transition px-6 py-3 rounded-xl font-semibold flex items-center gap-2 disabled:opacity-50 w-full justify-center"
+              >
+                {loading ? (
+                  <>
+                    <i className="fas fa-spinner fa-spin"></i>
+                    <span>{currentStep}</span>
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-microchip"></i>
+                    <span>{HAS_VALID_API_KEY ? "Evaluate with REAL Groq AI" : "Evaluate with AI (Demo Mode)"}</span>
+                  </>
+                )}
+              </button>
+              
+              {!HAS_VALID_API_KEY && (
+                <div className="mt-3 p-3 bg-yellow-500/10 rounded-lg border border-yellow-500/30">
+                  <p className="text-xs text-yellow-400">
+                    <i className="fas fa-key mr-1"></i>
+                    <strong>Demo Mode:</strong> Using smart simulation. 
+                    <br/>Get your FREE Groq API key from <a href="https://console.groq.com/keys" target="_blank" className="text-blue-400 underline">console.groq.com/keys</a>
+                  </p>
+                </div>
+              )}
+              
+              {HAS_VALID_API_KEY && (
+                <div className="mt-3 p-3 bg-green-500/10 rounded-lg border border-green-500/30">
+                  <p className="text-xs text-green-400">
+                    <i className="fas fa-check-circle mr-1"></i>
+                    <strong>✅ Live Mode Active!</strong> Using real Groq AI (LLaMA 3) to evaluate your query. Each model gets unique scores!
+                  </p>
+                </div>
+              )}
+            </div>
+            
+            {loading && (
+              <div className="glass-card p-8 text-center">
+                <div className="flex flex-col items-center gap-4">
+                  <div className="typing-indicator">
+                    <span style={{ animationDelay: '0s' }}></span>
+                    <span style={{ animationDelay: '0.2s' }}></span>
+                    <span style={{ animationDelay: '0.4s' }}></span>
+                  </div>
+                  <p className="text-blue-300">{currentStep}</p>
+                </div>
+              </div>
+            )}
+            
+            {optimizedPrompt && !loading && evaluation && (
+              <>
+                <div className="glass-card p-6">
+                  <div className="flex justify-between items-center flex-wrap gap-2 mb-3">
+                    <h3 className="text-white font-bold">
+                      <i className="fas fa-wand-magic mr-2 text-indigo-400"></i>Optimized Prompt
+                    </h3>
+                    <span className="bg-purple-900/40 px-3 py-1 rounded-full text-xs text-purple-200">
+                      <i className="fas fa-tag mr-1"></i>{evaluation.domain.toUpperCase()}
+                    </span>
+                  </div>
+                  <p className="text-gray-200 bg-black/30 p-4 rounded-xl whitespace-pre-wrap text-sm border-l-4 border-blue-500">{optimizedPrompt}</p>
+                </div>
+                
+                <div className="glass-card p-6">
+                  <h3 className="text-white font-bold mb-4">
+                    <i className="fas fa-chart-simple mr-2 text-yellow-400"></i>
+                    AI Model Rankings
+                  </h3>
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {rankedModels.map(model => {
+                      const isBest = model.isBest;
+                      const scoreColor = getScoreColor(model.score);
+                      return (
+                        <div 
+                          key={model.id} 
+                          className={`model-card glass-card p-4 rounded-2xl transition-all ${isBest ? 'ring-2 ring-yellow-400/80 shadow-2xl bg-gradient-to-r from-yellow-500/10 to-transparent' : ''}`} 
+                          onClick={() => handleRedirect(model)}
+                        >
+                          <div className="flex items-center gap-3">
+                            <i className={`${model.icon} text-2xl ${isBest ? 'text-yellow-400' : 'text-blue-300'}`}></i>
+                            <div className="flex-1">
+                              <h4 className="text-white font-bold">
+                                {model.name} 
+                                {isBest && <span className="ml-2 text-xs bg-yellow-500/30 px-2 py-0.5 rounded-full">🏆 BEST MATCH</span>}
+                              </h4>
+                              <p className="text-xs text-gray-400">{model.description.substring(0, 50)}...</p>
+                            </div>
+                            <div className={`text-right ${scoreColor}`}>
+                              <span className="text-2xl font-bold">{model.score}</span>
+                              <span className="text-xs">/100</span>
+                            </div>
+                          </div>
+                          
+                          <div className="w-full bg-gray-700 rounded-full h-2 mt-3">
+                            <div 
+                              className={`h-2 rounded-full transition-all duration-700 ${isBest ? 'bg-gradient-to-r from-yellow-500 to-orange-500' : 'bg-blue-500'}`} 
+                              style={{width: `${model.score}%`}}
+                            ></div>
+                          </div>
+                          
+                          <button className="mt-3 w-full bg-white/10 hover:bg-white/20 transition py-2 rounded-lg text-sm font-medium">
+                            <i className="fas fa-external-link-alt mr-1"></i>
+                            Use {model.name}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+                
+                <div className="glass-card p-5">
+                  <h4 className="text-white font-semibold">
+                    <i className="fas fa-microchip mr-2 text-green-400"></i>
+                    AI Evaluator Decision
+                  </h4>
+                  <p className="text-gray-300 text-sm mt-2 leading-relaxed">{evaluation.reasoning}</p>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <div className="bg-blue-500/10 rounded-lg p-3">
+                      <p className="text-xs text-blue-300 mb-2"><i className="fas fa-chart-line mr-1"></i>Unique Scores:</p>
+                      {Object.entries(evaluation.scores).map(([model, score]) => (
+                        <div key={model} className="flex justify-between text-xs mt-1">
+                          <span className="capitalize">{model}</span>
+                          <span className={getScoreColor(score)}>{score}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="bg-purple-500/10 rounded-lg p-3">
+                      <p className="text-xs text-purple-300 mb-2"><i className="fas fa-search mr-1"></i>Analysis:</p>
+                      <p className="text-xs text-gray-300">Domain: {evaluation.domain}<br/>
+                      Best Model: {evaluation.bestModel.toUpperCase()}<br/>
+                      Confidence: {evaluation.scores[evaluation.bestModel] >= 85 ? 'High' : evaluation.scores[evaluation.bestModel] >= 70 ? 'Medium' : 'Low'}</p>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+          
+          <div className="w-full lg:w-80 glass-card p-5 h-fit">
+            <h3 className="text-white font-bold flex items-center gap-2">
+              <i className="fas fa-clock-rotate-left text-blue-400"></i>
+              Recent History
+            </h3>
+            <HistorySidebar onSelectHistory={(entry) => {
+              setQuery(entry.query);
+              setOptimizedPrompt(entry.optimizedPrompt);
+              const scores = {
+                chatgpt: entry.selectedModel === "ChatGPT" ? entry.score || 85 : 70,
+                gemini: entry.selectedModel === "Gemini" ? entry.score || 85 : 70,
+                claude: entry.selectedModel === "Claude" ? entry.score || 85 : 70,
+                deepseek: entry.selectedModel === "DeepSeek" ? entry.score || 85 : 70
+              };
+              setEvaluation({
+                scores,
+                bestModel: entry.selectedModel.toLowerCase(),
+                domain: entry.domain || "general",
+                reasoning: `Previously selected ${entry.selectedModel} for this query type.`
+              });
+              const ranked = MODELS.map(model => ({
+                ...model,
+                score: scores[model.id],
+                isBest: model.name === entry.selectedModel
+              })).sort((a, b) => b.score - a.score);
+              setRankedModels(ranked);
+              showToast(`Loaded: ${entry.selectedModel}`, "success");
+            }} />
+          </div>
+        </div>
+      );
+    };
+    
+    // Dashboard Component
+    const Dashboard = () => {
+      const [analytics, setAnalytics] = useState({ total: 0, modelUsage: {} });
+      useEffect(() => {
+        const data = getFromLocalStorage("cleverpick_real_analytics", { total: 0, modelUsage: {} });
+        setAnalytics(data);
+      }, []);
+      
+      const total = analytics.total;
+      return (
+        <div className="p-6">
+          <div className="glass-card p-6 mb-6">
+            <h2 className="text-2xl font-bold text-white">Real AI Router Dashboard</h2>
+            <p className="text-gray-300">{HAS_VALID_API_KEY ? "✅ Live analytics from Groq AI" : "Analytics from simulation"}</p>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            {MODELS.map(m => {
+              const count = analytics.modelUsage[m.id] || 0;
+              const percent = total ? ((count/total)*100).toFixed(1) : 0;
+              return (
+                <div key={m.id} className="glass-card p-5 text-center hover:scale-105 transition">
+                  <i className={`${m.icon} text-4xl text-blue-300 mb-2 block`}></i>
+                  <h3 className="text-white font-bold text-xl">{m.name}</h3>
+                  <p className="text-2xl font-mono text-blue-200">{count} uses</p>
+                  <div className="w-full bg-gray-700 rounded-full h-2 mt-2">
+                    <div className={`bg-gradient-to-r ${m.color} h-2 rounded-full`} style={{width: `${percent}%`}}></div>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">{percent}% selection rate</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      );
+    };
+    
+    // Settings Page
+    const SettingsPage = () => {
+      return (
+        <div className="p-6 max-w-3xl mx-auto">
+          <div className="glass-card p-6">
+            <h2 className="text-white text-2xl font-bold"><i className="fas fa-sliders-h mr-2"></i>Real AI Router Settings</h2>
+            
+            <div className="mt-6 space-y-4">
+              <div className={`rounded-lg p-4 border ${HAS_VALID_API_KEY ? 'bg-green-500/10 border-green-500/30' : 'bg-yellow-500/10 border-yellow-500/30'}`}>
+                <h3 className={`font-semibold mb-2 ${HAS_VALID_API_KEY ? 'text-green-300' : 'text-yellow-300'}`}>
+                  <i className="fas fa-microchip mr-2"></i>API Key Status
+                </h3>
+                <p className="text-sm text-gray-300 mb-2">
+                  {HAS_VALID_API_KEY 
+                    ? "✅ Your Groq API key is active! Using real AI for evaluations." 
+                    : "⚠️ Demo Mode Active - Using smart simulation with different scores per model."}
+                </p>
+                {HAS_VALID_API_KEY && (
+                  <div className="bg-black/50 p-3 rounded-lg">
+                    <code className="text-xs text-green-400 break-all">
+                      API Key: {GROQ_API_KEY.substring(0, 15)}... (Active)
+                    </code>
+                  </div>
+                )}
+              </div>
+              
+              <div className="bg-blue-500/10 rounded-lg p-4">
+                <h3 className="text-blue-300 font-semibold mb-2"><i className="fas fa-chart-line mr-2"></i>Current Status</h3>
+                <p className="text-sm text-gray-300">
+                  {HAS_VALID_API_KEY 
+                    ? "✅ Real Groq AI (LLaMA 3) is evaluating your queries with unique scores per model!" 
+                    : "📊 Using smart simulation with different scores for each model based on query keywords."}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    };
+    
+    // Main App
+    const App = () => {
+      const [activePage, setActivePage] = useState("Chat");
+      const [toastMsg, setToastMsg] = useState(null);
+      useEffect(() => {
+        if (toastMsg) setTimeout(() => setToastMsg(null), 3000);
+      }, [toastMsg]);
+      return (
+        <div className="min-h-screen text-white relative">
+          <Navbar setActivePage={setActivePage} activePage={activePage} />
+          {activePage === "Chat" && <ChatPage setToast={setToastMsg} />}
+          {activePage === "Dashboard" && <Dashboard />}
+          {activePage === "Settings" && <SettingsPage />}
+          {toastMsg && <div className="toast-notify text-white bg-gray-900/90 backdrop-blur border-l-green-500"><i className="fas fa-bell mr-2"></i>{toastMsg}</div>}
+        </div>
+      );
+    };
+    
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

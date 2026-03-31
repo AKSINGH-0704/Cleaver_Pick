@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-void: #04060B;
+  --bg-primary: #0B0E14;
+  --bg-card: rgba(255, 255, 255, 0.03);
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --accent-cyan: #06D6A0;
+  --accent-amber: #FFB627;
+  --accent-rose: #EF476F;
+  --accent-violet: #7B61FF;
+  --accent-blue: #118AB2;
+  --text-primary: #F1F5F9;
+  --text-secondary: #94A3B8;
+  --text-muted: #475569;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background-color: var(--bg-void);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.glass-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 1rem;
+}
+
+.glass-card-hover {
+  transition: border-color 0.2s ease, transform 0.2s ease;
+}
+.glass-card-hover:hover {
+  border-color: rgba(6, 214, 160, 0.3);
+  transform: translateY(-2px);
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-subtle);
+  border-radius: 3px;
+}
+
+input[type='range'] {
+  accent-color: var(--accent-cyan);
+}
+
+/* ── Winner card animated gradient border ─────────────────────────── */
+@keyframes winner-border-pulse {
+  0%, 100% {
+    border-color: #06D6A0;
+    box-shadow: 0 0 18px rgba(6,214,160,0.18), inset 0 0 30px rgba(6,214,160,0.03);
+  }
+  50% {
+    border-color: #118AB2;
+    box-shadow: 0 0 18px rgba(17,138,178,0.18), inset 0 0 30px rgba(17,138,178,0.03);
+  }
+}
+.winner-card-border {
+  animation: winner-border-pulse 3s ease-in-out infinite;
+}
+
+/* ── WINNER badge shimmer sweep ──────────────────────────────────── */
+@keyframes shimmer-sweep {
+  0%   { background-position: 200% center; }
+  100% { background-position: -200% center; }
+}
+.shimmer-badge {
+  position: relative;
+  overflow: hidden;
+  background: rgba(6,214,160,0.12);
+}
+.shimmer-badge::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(6,214,160,0.35) 50%, transparent 70%);
+  background-size: 200% 100%;
+  animation: shimmer-sweep 2.5s linear infinite;
+}
+
+/* ── API status dot pulse ────────────────────────────────────────── */
+@keyframes status-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(6,214,160,0.5); }
+  50%       { box-shadow: 0 0 0 4px rgba(6,214,160,0); }
+}
+.status-dot-pulse {
+  animation: status-pulse 2.2s ease-in-out infinite;
+}
