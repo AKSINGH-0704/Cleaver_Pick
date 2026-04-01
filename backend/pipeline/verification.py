@@ -24,11 +24,24 @@ _TIME_PATTERNS = [
     r'who (won|leads|runs|owns|controls|holds) (the |a )?',
     r'\b202[5-9]\b',
     r'\b203\d\b',
+    # Sports records, titles, and championships — change frequently
+    r'\b\d+[\s-]time\b',                                         # "17-time", "17 time"
+    r'\b(world |wwe |ufc |nba |nfl |nhl |mlb |ipl )?(champion|championship|title|belt|record)\b',
+    r'\b(how many|total|number of)\b.{0,40}\b(titles|championships|wins|belts|reigns|medals|trophies)\b',
+    r'\b(current|reigning|defending) (champion|titleholder|record holder)\b',
+    r'\b(wrestlemania|summerslam|royal rumble|survivor series)\b', # WWE PPV events
+    r'\b(super bowl|world series|nba finals|stanley cup|champions league final)\b',
+    r'\b(world record|all.?time record|record holder|most (titles|wins|championships))\b',
+    r'\b(standings|leaderboard|rankings|top (player|team|scorer))\b',
+    r'\b(season|roster|transfer|signed|traded|drafted)\b',        # Ongoing sports context
+    r'\b(box office|grossed|earned|revenue).*(202[4-9]|latest|recent|now)\b',
+    r'\b(alive|still (alive|active|playing|competing|working))\b',# "is X still alive/active"
 ]
 
 _TIME_DISCLAIMER = (
-    "This query may involve recent events beyond the models\u2019 training data. "
-    "Scores reflect consistency with available knowledge sources, not real-time accuracy."
+    "This query may involve recent events or records that have changed after the models\u2019 "
+    "training data cutoff (October 2023). The AI models may not reflect the latest real-world "
+    "updates. Scores reflect internal consistency and knowledge up to that cutoff, not current accuracy."
 )
 
 
