@@ -2,15 +2,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle, AlertCircle, Info } from 'lucide-react';
 
 const icons = {
-  success: <CheckCircle size={16} className="text-[#06D6A0]" />,
-  error:   <AlertCircle size={16} className="text-[#EF476F]" />,
-  info:    <Info size={16} className="text-[#7B61FF]" />,
+  success: <CheckCircle size={16} style={{ color: 'var(--success)' }} />,
+  error:   <AlertCircle size={16} style={{ color: 'var(--danger)' }} />,
+  info:    <Info size={16} style={{ color: 'var(--accent)' }} />,
 };
 
-const borders = {
-  success: 'border-l-[#06D6A0]',
-  error:   'border-l-[#EF476F]',
-  info:    'border-l-[#7B61FF]',
+const BORDER_COLORS = {
+  success: 'var(--success)',
+  error:   'var(--danger)',
+  info:    'var(--accent)',
 };
 
 export default function Toast({ toasts, removeToast }) {
@@ -24,13 +24,23 @@ export default function Toast({ toasts, removeToast }) {
             animate={{ opacity: 1, x: 0, scale: 1 }}
             exit={{ opacity: 0, x: 60, scale: 0.95 }}
             transition={{ duration: 0.2 }}
-            className={`glass-card border-l-4 ${borders[toast.type] || borders.info} px-4 py-3 flex items-center gap-3 min-w-[280px] max-w-[400px] pointer-events-auto`}
+            className="px-4 py-3 flex items-center gap-3 min-w-[280px] max-w-[400px] pointer-events-auto rounded-xl border-l-4"
+            style={{
+              background: 'var(--bg-card)',
+              boxShadow: 'var(--shadow-card-hover)',
+              border: '1px solid var(--border-default)',
+              borderLeftColor: BORDER_COLORS[toast.type] || BORDER_COLORS.info,
+              borderLeftWidth: 4,
+            }}
           >
             {icons[toast.type] || icons.info}
-            <span className="text-sm text-[#F1F5F9] flex-1">{toast.message}</span>
+            <span className="text-sm flex-1" style={{ color: 'var(--text-secondary)' }}>{toast.message}</span>
             <button
               onClick={() => removeToast(toast.id)}
-              className="text-[#475569] hover:text-[#94A3B8] transition-colors"
+              className="transition-colors"
+              style={{ color: 'var(--text-muted)' }}
+              onMouseEnter={e => e.currentTarget.style.color = 'var(--text-secondary)'}
+              onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
             >
               <X size={13} />
             </button>

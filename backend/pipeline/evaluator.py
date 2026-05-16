@@ -1,6 +1,7 @@
 import json
 import logging
 from services.openai_client import call_openai
+from services.groq_client import call_groq, GROQ_QUALITY_MODEL
 
 logger = logging.getLogger(__name__)
 
@@ -60,16 +61,17 @@ ORIGINAL PROMPT: {prompt[:500]}
 RESPONSE FROM {model_name}:
 {response[:2000]}"""
 
-    try:
-        result = await call_openai(
-            eval_prompt,
-            model="gpt-4o",
-            system=RUBRIC_SYSTEM,
-            json_mode=True,
-            max_tokens=300,
-        )
-    except Exception as exc:
-        logger.error("evaluate_response: OpenAI call failed for %s — %s", model_name, exc, exc_info=True)
+    result = None
+    for caller, kwargs in [
+        (call_openai, {"model": "gpt-4o",          "system": RUBRIC_SYSTEM, "json_mode": True, "max_tokens": 300}),
+        (call_groq,   {"model": GROQ_QUALITY_MODEL, "system": RUBRIC_SYSTEM, "json_mode": True, "max_tokens": 300}),
+    ]:
+        try:
+            result = await caller(eval_prompt, **kwargs)
+            break
+        except Exception as exc:
+            logger.warning("evaluate_response: %s failed for %s — %s", caller.__name__, model_name, exc)
+    if result is None:
         return _DEFAULT_RESULT
 
     try:

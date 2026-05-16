@@ -4,17 +4,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-# gemini-2.5-flash: free tier, thinking disabled for fast generation
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
 
 async def call_gemini(prompt: str, system: str = "You are a helpful assistant.", max_tokens: int = 1500) -> str:
     """Call Google Gemini 2.5 Flash via REST API."""
+    api_key = os.getenv("GEMINI_API_KEY")
     async with httpx.AsyncClient(timeout=45) as client:
         response = await client.post(
             GEMINI_URL,
-            params={"key": GEMINI_API_KEY},
+            params={"key": api_key},
             json={
                 "contents": [
                     {"role": "user", "parts": [{"text": prompt}]}

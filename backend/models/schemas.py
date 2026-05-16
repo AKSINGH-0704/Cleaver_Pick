@@ -7,5 +7,9 @@ class EvaluateRequest(BaseModel):
     conversation_history: Optional[list] = []
     custom_weights: Optional[dict] = None
 
+class OptimizeRequest(BaseModel):
+    prompt: str
+    domain: Optional[str] = "auto"
+
 class BenchmarkRequest(BaseModel):
     count: int = 10

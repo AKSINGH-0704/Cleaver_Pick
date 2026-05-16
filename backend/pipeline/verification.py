@@ -5,6 +5,7 @@ import logging
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from services.openai_client import call_openai
+from services.groq_client import call_groq, GROQ_FAST_MODEL
 from services.hf_embeddings import get_embeddings
 from services.wikipedia_client import search_wikipedia
 
@@ -67,19 +68,26 @@ Rules:
 
 Text: {text[:2000]}"""
 
+    result = None
+    for caller, kwargs in [
+        (call_openai, {"model": "gpt-4o-mini",   "system": system, "json_mode": True, "max_tokens": 300}),
+        (call_groq,   {"model": GROQ_FAST_MODEL,  "system": system, "json_mode": True, "max_tokens": 300}),
+    ]:
+        try:
+            result = await caller(prompt, **kwargs)
+            break
+        except Exception as exc:
+            logger.warning("extract_claims: %s failed — %s", caller.__name__, exc)
+    if result is None:
+        return []
     try:
-        result = await call_openai(prompt, model="gpt-4o-mini", system=system, json_mode=True, max_tokens=300)
         parsed = json.loads(result)
         claims = parsed.get("claims", [])
         if not isinstance(claims, list):
-            logger.warning("extract_claims: 'claims' field is not a list, got %s", type(claims))
             return []
         return [c for c in claims if isinstance(c, str) and c.strip()][:5]
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, TypeError) as exc:
         logger.warning("extract_claims: JSON parse failed — %s", exc)
-        return []
-    except Exception as exc:
-        logger.error("extract_claims: OpenAI call failed — %s", exc, exc_info=True)
         return []
 
 

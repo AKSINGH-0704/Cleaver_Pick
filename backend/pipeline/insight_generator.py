@@ -1,18 +1,19 @@
 """
-Model insight generator.
-Produces a single-sentence, query-specific performance insight for each model
-by calling the GPT-4o judge with the actual computed scores.
-Every call produces different text — no hardcoded strings.
+Model insight generator — GPT-4o-mini primary, Groq fallback.
 """
 import logging
 from services.openai_client import call_openai
+from services.groq_client import call_groq, GROQ_FAST_MODEL
 
 logger = logging.getLogger(__name__)
 
 MODEL_DISPLAY = {
     "gpt":    "GPT-4o-mini",
     "gemini": "Gemini 2.5 Flash",
+    "groq":   "Llama 3.3 70B",
 }
+
+_SYSTEM = "You write precise one-sentence performance analyses for AI model evaluations. No preamble."
 
 
 async def generate_model_insight(
@@ -22,10 +23,6 @@ async def generate_model_insight(
     agreement_score: float,
     verification_score: float,
 ) -> str:
-    """
-    Returns a single sentence describing why this model performed as it did
-    for this specific query. Scores are real computed values — text varies per query.
-    """
     display_name = MODEL_DISPLAY.get(model_key, model_key)
     accuracy     = eval_breakdown.get("accuracy",     5)
     relevance    = eval_breakdown.get("relevance",    5)
@@ -38,22 +35,21 @@ async def generate_model_insight(
         f"accuracy: {accuracy}/10, relevance: {relevance}/10, completeness: {completeness}/10, "
         f"clarity: {clarity}/10, cross-model agreement: {agreement_score:.0%}, "
         f"fact verification rate: {verification_score:.0%}. "
-        f"Be specific and analytical. Do not mention the model's name in the sentence."
+        f"Be specific and analytical. Do not mention the model's name."
     )
 
-    try:
-        insight = await call_openai(
-            prompt,
-            model="gpt-4o-mini",
-            system="You write precise one-sentence performance analyses for AI model evaluations. No preamble.",
-            max_tokens=60,
-        )
-        # Strip quotes and trailing punctuation issues
-        insight = insight.strip().strip('"').strip("'")
-        if not insight.endswith('.'):
-            insight += '.'
-        logger.info("insight for %s: %s", model_key, insight[:80])
-        return insight
-    except Exception as exc:
-        logger.warning("insight_generator: failed for %s — %s", model_key, exc)
-        return f"Scored {accuracy}/10 accuracy with {verification_score:.0%} fact verification rate."
+    for caller, kwargs in [
+        (call_openai, {"model": "gpt-4o-mini",  "system": _SYSTEM, "max_tokens": 60}),
+        (call_groq,   {"model": GROQ_FAST_MODEL, "system": _SYSTEM, "max_tokens": 60}),
+    ]:
+        try:
+            insight = await caller(prompt, **kwargs)
+            insight = insight.strip().strip('"').strip("'")
+            if not insight.endswith('.'):
+                insight += '.'
+            logger.info("insight for %s: %s", model_key, insight[:80])
+            return insight
+        except Exception as exc:
+            logger.warning("insight_generator %s failed for %s: %s", caller.__name__, model_key, exc)
+
+    return f"Scored {accuracy}/10 accuracy with {verification_score:.0%} fact verification rate."

@@ -1,9 +1,9 @@
 import logging
 from fastapi import APIRouter
 from sse_starlette.sse import EventSourceResponse
-from models.schemas import EvaluateRequest
+from models.schemas import EvaluateRequest, OptimizeRequest
 from pipeline.intent import classify_intent
-from pipeline.prompt_optimizer import optimize_prompt, get_domain_description, DOMAIN_TEMPLATES
+from pipeline.prompt_optimizer import optimize_prompt, get_domain_description, DOMAIN_TEMPLATES, generate_prompt_variants
 from pipeline.dispatcher import dispatch_to_models, select_models
 from pipeline.agreement import compute_agreement
 from pipeline.verification import run_verification, is_time_sensitive
@@ -19,9 +19,10 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def sse_event(stage: int, message: str, progress: int):
-    return {"event": "progress",
-            "data": json.dumps({"stage": stage, "message": message, "progress": progress})}
+def sse_event(stage: int, message: str, progress: int, **extra):
+    data = {"stage": stage, "message": message, "progress": progress}
+    data.update(extra)
+    return {"event": "progress", "data": json.dumps(data)}
 
 
 @router.post("/evaluate")
@@ -51,25 +52,41 @@ async def evaluate(request: EvaluateRequest):
             applied_domain = requested_domain
             domain_source  = "manually set"
 
-        yield sse_event(0, f"Intent: {intent} · Domain: {applied_domain} ({domain_source})", 10)
+        # Emit intent + domain immediately after classification so frontend can show them
+        yield sse_event(0, f"Intent: {intent} · Domain: {applied_domain} ({domain_source})", 10,
+            intent=intent, applied_domain=applied_domain)
 
         # Time-sensitivity check (pure, no I/O)
         time_sensitive, time_disclaimer = is_time_sensitive(raw_prompt)
 
+        # Signal that prompt optimisation is starting
+        yield sse_event(0, "AI is cleaning and optimizing your prompt…", 11,
+            intent=intent, applied_domain=applied_domain)
+
         # ── Prompt optimisation ──────────────────────────────────────────────
-        optimized_prompt, template_used = optimize_prompt(raw_prompt, applied_domain)
-        optimization_applied = template_used is not None
+        optimized_prompt, template_used, ai_cleaned_prompt = await optimize_prompt(raw_prompt, applied_domain)
+        # Always True now — AI spell-fixes and cleans the prompt even for general domain
+        optimization_applied = True
         logger.info(
             "Prompt optimisation: domain=%s applied=%s optimized_len=%d",
             applied_domain, optimization_applied, len(optimized_prompt),
         )
+
+        # Emit the cleaned prompt so the PromptOptimizer panel fills in immediately
+        yield sse_event(0, f"Prompt optimized · {applied_domain} framing applied", 13,
+            intent=intent, applied_domain=applied_domain, ai_cleaned_prompt=ai_cleaned_prompt)
 
         # Domain weights
         domain_weights = request.custom_weights or DOMAIN_PRESETS.get(applied_domain, DEFAULT_WEIGHTS)
 
         # ── Stage 1: Dispatch (send optimised prompt to models) ──────────────
         models = select_models(intent)
-        yield sse_event(1, f"Querying {len(models)} models in parallel...", 15)
+        yield sse_event(
+            1, f"Querying {len(models)} models in parallel…", 15,
+            ai_cleaned_prompt=ai_cleaned_prompt,
+            intent=intent,
+            applied_domain=applied_domain,
+        )
         try:
             responses = await dispatch_to_models(optimized_prompt, models)
             valid = {k: v for k, v in responses.items() if v.get("text")}
@@ -221,6 +238,7 @@ async def evaluate(request: EvaluateRequest):
             "domain":            applied_domain,   # kept for backwards compat
             # Prompt optimisation fields
             "optimized_prompt":          optimized_prompt,
+            "ai_cleaned_prompt":         ai_cleaned_prompt,
             "optimization_applied":      optimization_applied,
             "optimization_description":  get_domain_description(applied_domain),
             "domain_weights":            domain_weights,
@@ -231,3 +249,28 @@ async def evaluate(request: EvaluateRequest):
         })}
 
     return EventSourceResponse(pipeline())
+
+
+@router.post("/optimize")
+async def get_optimized_variants(request: OptimizeRequest):
+    """
+    Auto-detect domain and return STRUCTURED / ANALYTICAL / CONCISE prompt variants.
+    Called by the frontend Optimize button before the user starts evaluation.
+    """
+    raw_prompt = request.prompt.strip()
+    requested_domain = (request.domain or "auto").strip().lower()
+
+    try:
+        classification = await classify_intent(raw_prompt)
+        detected_domain = classification.get("domain", "general")
+    except Exception as exc:
+        logger.warning("optimize /classify_intent failed: %s", exc)
+        detected_domain = "general"
+
+    applied_domain = (
+        detected_domain if requested_domain in ("auto", "", "none")
+        else requested_domain
+    )
+
+    variants = await generate_prompt_variants(raw_prompt, applied_domain)
+    return {"detected_domain": applied_domain, "variants": variants}

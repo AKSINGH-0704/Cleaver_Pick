@@ -1,4 +1,7 @@
+import { MODEL_COLORS as BRAND_COLORS, MODEL_LABELS as BRAND_LABELS } from './modelConfigs';
+
 export function scoreColor(score) {
+  if (score == null) return '#94A3B8';
   if (score >= 0.75) return '#06D6A0';
   if (score >= 0.50) return '#FFB627';
   return '#EF476F';
@@ -19,12 +22,10 @@ export function statusColor(status) {
   }
 }
 
-export const MODEL_COLORS = {
-  gpt:    '#10A37F',  // OpenAI green
-  gemini: '#4285F4',  // Google blue
-};
+export const MODEL_COLORS = BRAND_COLORS;
+export const MODEL_LABELS = BRAND_LABELS;
 
-export const MODEL_LABELS = {
-  gpt:    'GPT-4o-mini',
-  gemini: 'Gemini 2.5 Flash',
-};
+export function getValue(raw) {
+  if (raw == null) return 0;
+  return typeof raw === 'object' ? raw.value ?? 0 : raw;
+}
